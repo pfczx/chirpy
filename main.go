@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -58,6 +59,48 @@ func (h *Handler) HandleReset(cfg *apiConfig) http.Handler {
 	})
 }
 
+func (h *Handler) HandleValidateChirp(cfg *apiConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		type request struct {
+			Body string `json:"body"`
+		}
+		type response struct {
+			Body bool `json:"valid"`
+		}
+		type errorJson struct {
+			Body string `json:"error"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		req := request{}
+		err := decoder.Decode(&req)
+		if err != nil {
+			body := errorJson{
+				Body: "Something went wrong",
+			}
+			data, _ := json.Marshal(body)
+			w.WriteHeader(400)			
+			w.Write(data)
+			return
+		}
+		if len(req.Body) > 140 {
+			body := errorJson{
+				Body: "Chirp is too long",
+			}
+			data, _ := json.Marshal(body)
+			w.WriteHeader(400)
+			w.Write(data)
+			return
+		}
+		resp := response{
+			Body: true,
+		}
+		data, _ := json.Marshal(resp)
+		w.Write(data)
+		w.WriteHeader(200)
+	})
+}
+
 func main() {
 	handler := &Handler{}
 	cfg := &apiConfig{}
@@ -71,8 +114,9 @@ func main() {
 
 	mux.Handle("/app/", handler.HandleFileServer(cfg))
 	mux.Handle("GET /api/healthz", handler.HandleHealthz())
-	mux.Handle("GET /api/metrics", handler.HandleMetrics(cfg))
-	mux.Handle("POST /api/reset", handler.HandleReset(cfg))
+	mux.Handle("GET /admin/metrics", handler.HandleMetrics(cfg))
+	mux.Handle("POST /admin/reset", handler.HandleReset(cfg))
+	mux.Handle("POST /api/validate_chirp",handler.HandleValidateChirp(cfg))
 
 	server.ListenAndServe()
 }
