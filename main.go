@@ -61,43 +61,41 @@ func (h *Handler) HandleReset(cfg *apiConfig) http.Handler {
 
 func (h *Handler) HandleValidateChirp(cfg *apiConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		type request struct {
+		decoder := json.NewDecoder(r.Body)
+		var req struct {
 			Body string `json:"body"`
 		}
-		type response struct {
-			Body bool `json:"valid"`
-		}
-		type errorJson struct {
-			Body string `json:"error"`
-		}
-		decoder := json.NewDecoder(r.Body)
-		req := request{}
 		err := decoder.Decode(&req)
 		if err != nil {
-			body := errorJson{
-				Body: "Something went wrong",
+			var body struct {
+				Body string `json:"body"`
 			}
-			data, _ := json.Marshal(body)
-			w.WriteHeader(400)			
-			w.Write(data)
-			return
-		}
-		if len(req.Body) > 140 {
-			body := errorJson{
-				Body: "Chirp is too long",
-			}
+			body.Body = "Something went wrong"
 			data, _ := json.Marshal(body)
 			w.WriteHeader(400)
 			w.Write(data)
 			return
 		}
-		resp := response{
-			Body: true,
+		if len(req.Body) > 140 {
+			var body struct {
+				Body string `json:"body"`
+			}
+			body.Body = "Chirp is too long"
+			data, _ := json.Marshal(body)
+			w.WriteHeader(400)
+			w.Write(data)
+			return
 		}
-		data, _ := json.Marshal(resp)
-		w.Write(data)
+		var cleanedBody struct {
+			Cleaned_body string `json:"cleaned_body"`
+		}
+		consored := Cenzo(req.Body)
+		cleanedBody.Cleaned_body = consored
+		data, _ := json.Marshal(cleanedBody)
 		w.WriteHeader(200)
+		w.Write(data)
 	})
 }
 
@@ -116,7 +114,7 @@ func main() {
 	mux.Handle("GET /api/healthz", handler.HandleHealthz())
 	mux.Handle("GET /admin/metrics", handler.HandleMetrics(cfg))
 	mux.Handle("POST /admin/reset", handler.HandleReset(cfg))
-	mux.Handle("POST /api/validate_chirp",handler.HandleValidateChirp(cfg))
+	mux.Handle("POST /api/validate_chirp", handler.HandleValidateChirp(cfg))
 
 	server.ListenAndServe()
 }
